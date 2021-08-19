@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OnlineForms</title>
+    <script src="Script.js" type="Module"></script>
+    <link rel="stylesheet" href="Style.css">
+</head>
+<body>
+
+<div id="buttons">
+    <button id="administration">Administration</button>
+    <button id="forms">Forms</button>
+</div>
+
+<div id="main-container">
+
+</div>
+
+<script>
+    let db = null
+    let activeFields = 0; //Variable for tracking the number of divs in a form (for id purposes)
+
+    createDB();
+
+    /**
+     * function takes a form object and saves it to indexeddb, in form blueprints
+     * it can either save or update
+     * @param form - can have any number of properties
+     */
+    function addOrUpdateForm(form) {
+        const transaction = db.transaction("form_blueprints", "readwrite")
+        transaction.onerror = e => alert(`Error! ${e.target.error}`)
+        const blueprints = transaction.objectStore("form_blueprints")
+        blueprints.put(form);
+        createObjectStore(form.form_name);
+        alert(`Form (${form.form_name}) successfully saved!`)
+    }
+
+    /**
+     * Function opens the main database, called immediately at the start
+     */
+    function createDB () {
+        const request = indexedDB.open("my_forms")
+
+        request.onupgradeneeded = e => {
+            db = e.target.result
+            db.createObjectStore("form_blueprints", {keyPath: "form_name"})
+        }
+
+        request.onsuccess = e => {
+            db = e.target.result;
+        }
+
+        request.onerror = e => {
+            alert(`Error: ${e.target.error}`)
+        }
+
+    }
+
+    /**
+     * Function searches the database for a blueprint by name taken from searchbar
+     * It also calls render functions for the fields if query is successful
+     */
+    function searchDB() {
+        const text = document.getElementById("searchbar").value
+        const formContainer = document.getElementById("form-container")
+
+        const transaction = db.transaction("form_blueprints", "readonly");
+        const blueprints = transaction.objectStore("form_blueprints");
+        let getRequest = blueprints.get(text);
+
+        getRequest.onsuccess = ev => {
+            let data = ev.target.result;
+
+            formContainer.innerHTML = "";
+            activeFields = 1;
+
+            if (data){
+                renderData(data, formContainer);
+            }
+
+            else{
+                renderRow()
+                activeFields++;
+            }
+            const container = document.getElementById("main-container");
+            if (!container.innerHTML.includes(`<button onclick="renderRow()">Add</button>`))
+                container.innerHTML += `<button onclick="renderRow()">Add</button>`
+            document.getElementById("searchbar").value = text;
+        }
+    }
+
+    /**
+     * Function handles changes in the type spinner (textbox, checkbox, radio)
+     * If the new value is radio, it renders a div for the options
+     * If the new value is something else, it removes the previously rendered options and option number inputs
+     * @param elementNumber - index of the element
+     */
+    function onTypeChanged(elementNumber){
+        const formContainer = document.getElementById("form-container")
+        let containerDiv = formContainer.children[elementNumber-1];
+        let spinnerValue = containerDiv.children[2].value
+
+        if (spinnerValue === "Radio button"){
+            let radioOptionsInput = document.createElement("input");
+            radioOptionsInput.type = "number";
+            radioOptionsInput.value = "2";
+            let optionsDiv = document.createElement("div");
+            optionsDiv.innerHTML =
+                `<label>Option 1</label> <input type="text"> <br> <label>Option 2</label> <input type="text"> <br>`
+            containerDiv.appendChild(optionsDiv);
+
+            radioOptionsInput.addEventListener("input", () => numberChanged(radioOptionsInput))
+            containerDiv.insertBefore(radioOptionsInput,containerDiv.children[3])
+        }
+        else{
+            //If a 6th child exists, it means the field used to be a radio button
+            if (containerDiv.children[6]){
+                //Remove the div containing the radio options (6th child)
+                containerDiv.removeChild(containerDiv.children[6]);
+                //Remove the number input also (3rd child)
+                containerDiv.removeChild(containerDiv.children[3]);
+            }
+        }
+    }
+
+    /**
+     * function called on clicking the save button
+     * Collects the data, then passes it to addOrUpdateForm(), which deals with the database
+     */
+    function saveForm() {
+        const formContainer = document.getElementById("form-container");
+        const searchBar = document.getElementById("searchbar");
+
+        //First deal with the "base cases", no name and no fields
+        if(searchBar.value.length < 1){
+            alert("Form has no name!");
+            return
+        }
+
+        if(formContainer.children.length === 0){
+            alert("Form fields haven't been rendered yet!");
+            return
+        }
+
+        let form = {
+            form_name: searchBar.value,
+            fields: [
+
+            ]
+        };
+
+        //Collecting data in an array
+        for (let i=0; i<formContainer.children.length; i++) {
+            let data = [];
+            const row = formContainer.children[i];
+            for (let j=1; j<row.children.length; j++){
+
+                if (row.children[j].tagName === "DIV"){
+                    let options = [];
+                    //Every odd child is a text input (even ones are labels)
+                    for (let k=1; k<row.children[j].children.length; k+=3){
+                        options.push(row.children[j].children[k].value);
+                    }
+                    data.push(options);
+                }
+                else if (row.children[j].tagName !== "BR"){
+                    data.push(row.children[j].value);
+                }
+
+            }
+
+            if (!isValid(data)){
+                return alert("All fields must be named!")
+            }
+
+            //New object which will be stored in the database
+            let field;
+
+            if (data.length > 3){
+                field = {
+                    name: data[0],
+                    type:data[1],
+                    option: data[3],
+                    radioOptions: data[4]
+                }
+            }
+            else{
+                field = {
+                    name: data[0],
+                    type:data[1],
+                    option: data[2]
+                }
+            }
+            form.fields.push(field);
+
+        }
+        addOrUpdateForm(form);
+    }
+
+
+    /**
+     * Validates data passed from saveForm()
+     * returns false if there is any empty data provided
+     * anything else is valid, so returns true
+     * @param data - array of strings
+     * @returns {boolean}
+     */
+    function isValid(data){
+        if (data.includes("")) return false
+        //Special case for radio options
+        if (data[4] && data[4].includes("")) return false;
+        return true;
+    }
+
+
+    /**
+     * Handles changes in number input regarding radio button options
+     * @param spinner object of type input
+     */
+    function numberChanged(spinner){
+        const optionsDiv = spinner.parentElement.children[6];
+        const value = spinner.value;
+
+        //It disallows values less than 2, since it wouldn't make sense
+        if (value < 2){
+            spinner.value = "2"
+            return
+        }
+
+        let template = ``;
+        let oldInputs = [];
+
+        for (let i=1; i<optionsDiv.children.length; i+=3){
+            oldInputs.push(optionsDiv.children[i].value);
+        }
+
+        for (let i=1; i<=value; i++){
+            template +=
+                `<label>Option${i}</label> <input type="text" value="${oldInputs[i-1] ? oldInputs[i-1] : ""}"> <br>`
+        }
+        optionsDiv.innerHTML = template;
+    }
+
+
+    /**
+     * Creates a new objectStore that matches the previously created form blueprint
+     * @param storeName string
+     */
+    function createObjectStore(storeName) {
+        let version = db.version + 1;
+        db.close();
+        let request = indexedDB.open("my_forms", version);
+        request.onsuccess = e => {
+            db = e.target.result;
+        }
+        request.onupgradeneeded = e => {
+            let database = e.target.result;
+            try {
+                database.createObjectStore(storeName, {
+                    keyPath: 'version'
+                });
+            }
+            catch (e) {
+                console.log("Already exists, form updated only");
+            }
+        };
+    }
+
+//**********************************************************************************************************************
+    //RENDER FUNCTIONS
+
+    function renderTypeSpinner(type, counter, number = 0){
+        if (type === "Textbox"){
+            return `<select onchange="onTypeChanged(${counter})">
+                        <option selected>Textbox</option>
+                        <option>Checkbox</option>
+                        <option>Radio button</option>
+                    </select>`
+        }
+        else if (type === "Checkbox"){
+            return `<select onchange="onTypeChanged(${counter})">
+                        <option>Textbox</option>
+                        <option selected>Checkbox</option>
+                        <option>Radio button</option>
+                    </select>`
+        }
+        else {
+            return `<select onchange="onTypeChanged(${counter})">
+                        <option>Textbox</option>
+                        <option>Checkbox</option>
+                        <option selected>Radio button</option>
+                    </select>
+                    <input id="numberinput${counter}" type="number" value="${number}" oninput="numberChanged(this)">`
+        }
+    }
+
+    function renderOptionSpinner(option){
+        if(option === "Mandatory"){
+            return `<select>
+                        <option selected>Mandatory</option>
+                        <option>Numeric</optionselected>
+                        <option>None</option>
+                    </select>
+                    <br>`
+        }
+        else if (option === "Numeric"){
+            return `<select>
+                        <option>Mandatory</option>
+                        <option selected>Numeric</optionselected>
+                        <option>None</option>
+                    </select>
+                    <br>`
+        }
+        else {
+            return `<select>
+                        <option>Mandatory</option>
+                        <option>Numeric</option>
+                        <option selected>None</option>
+                    </select>
+                    <br>`
+        }
+
+    }
+
+    function renderRadioOptions(options){
+        let template = `<div class="options-wrapper">`
+
+        options.forEach(item => {
+            template +=
+                `<label>Option ${options.indexOf(item)+1}</label> <input type="text" value="${item}"> <br> `
+        })
+
+        template += `</div>`;
+        return template
+    }
+
+    function renderRow(){
+        const formContainer = document.getElementById("form-container");
+        let inputField = document.createElement("div");
+        inputField.innerHTML +=
+            `<label>Element ${activeFields}</label> <input type="text">
+             <select onchange="onTypeChanged(${activeFields})">
+                <option>Textbox</option>
+                <option>Checkbox</option>
+                <option>Radio button</option>
+             </select>
+
+             <select>
+                <option>Mandatory</option>
+                <option>Numeric</option>
+                <option>None</option>
+             </select>
+             <br>
+                `;
+        formContainer.appendChild(inputField);
+        activeFields++;
+    }
+
+    function renderTextField(field, counter, value=""){
+        let template = `<label>${field.name}</label>`;
+        if (field.option === "Numeric")
+            template += `<input type="number" id="input${counter}" value="${value}">`
+        else
+            template += `<input type="text" id="input${counter}" value="${value}">`
+
+        return template;
+    }
+
+    function renderCheckbox(field, counter){
+        return `<label>${field.name}</label> <input type="checkbox" id="input${counter}">`
+    }
+
+    function renderRadio(field, counter){
+        let template = `<label>${field.name}</label> <br>`;
+        for (const it in field.radioOptions) {
+            template +=
+                `<input type="radio" class="radioOption" name="radio${counter}"> <label>${field.radioOptions[it]}</label> <br>`
+        }
+
+        return template;
+    }
+
+    function renderData(data,container){
+        let counter = 1;
+        data.fields.forEach(ev => {
+            let inputField = document.createElement("div");
+            let template =
+                `<label>Element ${counter}</label> <input type="text" value="${ev.name}">`
+
+            if(ev.radioOptions){
+                template += renderTypeSpinner(ev.type, counter, ev.radioOptions.length);
+            }
+            else{
+                renderTypeSpinner(ev.type, counter);
+            }
+            template += renderOptionSpinner(ev.option);
+
+            if (ev.radioOptions) template += renderRadioOptions(ev.radioOptions)
+
+            inputField.innerHTML = template;
+            container.appendChild(inputField);
+            counter++;
+        })
+        activeFields = counter;
+    }
+
+    //******************************************************************************************************************
+    //FORMS TAB
+
+    /**
+     * Searches form_blueprints for a given form
+     * First renders empty form
+     * If version is provided, it searches for form data as well
+     * If data is found, fields are populated accordingly
+     */
+    function searchForms(){
+        const formName = document.getElementById("form-searchbar").value
+        const version = document.getElementById("version-searchbar").value
+        const formContainer = document.getElementById("form-container")
+
+        //First get form blueprint
+        //Then fill with data if applicable
+
+        const blueprintTransaction = db.transaction("form_blueprints", "readonly");
+        const blueprints = blueprintTransaction.objectStore("form_blueprints");
+        let getBlueprintRequest = blueprints.get(formName);
+
+        getBlueprintRequest.onsuccess = ev => {
+            let data = ev.target.result;
+
+            formContainer.innerHTML = "";
+            activeFields = 1;
+
+            if (data){
+                let counter = 1;
+                data.fields.forEach(ev => {
+                    let template;
+                    if(ev.type === "Textbox") template = renderTextField(ev, counter);
+                    else if (ev.type === "Checkbox") template = renderCheckbox(ev, counter);
+                    else template = renderRadio(ev, counter);
+
+                    let inputField = document.createElement("div");
+
+                    if(ev.option === "Mandatory"){
+                        inputField.className = ev.option;
+                    }
+
+                    inputField.className += ` ${ev.type}`;
+
+                    inputField.innerHTML = template;
+                    formContainer.appendChild(inputField);
+                    counter++;
+                })
+                activeFields = counter;
+
+                if(version){
+                    const transaction = db.transaction(formName, "readonly");
+                    const objectStore = transaction.objectStore(formName);
+                    let getRequest = objectStore.get(parseInt(version));
+
+                    getRequest.onsuccess = ev => {
+                        let rowData = ev.target.result;
+
+                        if (!rowData) return;
+
+                        let attributesPassed = 1;
+
+                        let inputs = formContainer.getElementsByTagName("input");
+                        for (let y = 0; y < inputs.length; y++) {
+                            if(inputs[y].parentElement.className.includes("Textbox")){
+                                inputs[y].value = rowData[`${inputs[y].id}`]
+                                attributesPassed++;
+                            }
+                            else if(inputs[y].parentElement.className.includes("Checkbox")){
+                                inputs[y].checked = rowData[`${inputs[y].id}`]
+                                attributesPassed++;
+                            }
+                            else {
+                                if(inputs[y].nextElementSibling.textContent === rowData[`input${attributesPassed}`]){
+                                    inputs[y].checked = true;
+                                    attributesPassed++;
+                                }
+                            }
+                        }
+                    }
+                }
+
+            }
+            else alert(`Form \"${formName}\" not found!`)
+        }
+        const saveDataButton = document.getElementById("save-data");
+        saveDataButton.addEventListener("click",saveData)
+    }
+
+    /**
+     * Collects and validates data from the form
+     * Checks for empty mandatory fields
+     * Numeric fields are already handled by input type, so no need to check
+     * Calls addToDatabase if everything passes
+     */
+    function saveData(){
+        const formName = document.getElementById("form-searchbar").value
+        const version = document.getElementById("version-searchbar").value
+        const formContainer = document.getElementById("form-container")
+
+        if(!version) return alert("No version specified!");
+        if (!formName) return alert("Form must have a name!");
+
+        let data = {
+            form_name: formName,
+            version: parseInt(version)
+        }
+
+        for (let i = 0; i < formContainer.children.length; i++) {
+            let it = formContainer.children[i];
+
+            let fieldData;
+
+            if(it.className.includes("Radio")){
+                let options = it.getElementsByClassName("radioOption");
+                for (let j = 0; j<options.length; j++){
+                    if (options[j].checked){
+                        fieldData = options[j].nextElementSibling.textContent;
+                    }
+                }
+                if (!fieldData) return alert(`Field \"${it.children[0].textContent}\" is mandatory!`)
+            }
+            else if (it.className.includes("Textbox")) {
+                fieldData = it.children[1].value
+                if(it.className.includes("Mandatory") && (!fieldData)){
+                    return alert(`Field \"${it.children[0].textContent}\" is mandatory!`);
+                }
+            }
+            else {
+                fieldData = it.children[1].checked
+            }
+            data[`input${i+1}`] = fieldData;
+        }
+        addToDatabase(data)
+    }
+
+    /**
+     * Saves or updates provided data to appropriate objectStore
+     * @param data object
+     */
+    function addToDatabase(data) {
+        const transaction = db.transaction(data.form_name, "readwrite")
+        transaction.onerror = e => alert(`Error! ${e.target.error}`)
+        const objectStore = transaction.objectStore(data.form_name)
+        objectStore.put(data);
+        alert(`Form (${data.form_name}, version ${data.version}) successfully saved!`);
+    }
+
+
+</script>
+
+</body>
+</html>

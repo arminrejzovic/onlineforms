@@ -1,0 +1,97 @@
+/* A little styling, nothing too much */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat&display=swap');
+
+*{
+    box-sizing: border-box;
+    font-family: 'Montserrat', sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+body{
+    background: lightgrey;
+    padding: 8px;
+}
+
+div{
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+#main-container, #buttons{
+    background: white;
+    width: 50vw;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+#searchbar{
+    border-radius: 20px;
+    height: 2.5em;
+    width: 80%;
+    padding: 8px;
+}
+
+#searchbar:focus{
+    outline: none;
+}
+
+#buttons{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#buttons button{
+    background: none;
+    outline: none;
+    height: 2em;
+    width: 50%;
+    padding-bottom: 2em;
+}
+
+.active{
+    border-bottom: 5px solid darkblue;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    transition: border-bottom-width;
+}
+
+.inactive{
+    border: none;
+    border-bottom: 5px solid transparent;
+}
+
+.inactive:hover{
+    border-bottom: 5px solid #00008B33;
+    transition: border-bottom-width 300ms ease;
+}
+
+label{
+    font-size: 0.8em;
+    margin-right: 10px;
+}
+
+input{
+    margin-right: 10px;
+    padding: 5px;
+}
+
+#main-container > button{
+    height: 2em;
+    padding-left: 20px;
+    padding-right: 20px;
+    background: darkblue;
+    color: white;
+    margin: 5px;
+}
+
+.options-wrapper{
+    margin-left: 2em;
+}
+
+input[type="radio"]{
+    margin-right: 0;
+}
