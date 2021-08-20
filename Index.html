@@ -123,6 +123,7 @@
                 containerDiv.removeChild(containerDiv.children[3]);
             }
         }
+        containerDiv.className = `${containerDiv.className.split(" ")[0]} ${spinnerValue}`
     }
 
     /**
@@ -153,46 +154,42 @@
 
         //Collecting data in an array
         for (let i=0; i<formContainer.children.length; i++) {
-            let data = [];
             const row = formContainer.children[i];
-            for (let j=1; j<row.children.length; j++){
 
-                if (row.children[j].tagName === "DIV"){
-                    let options = [];
-                    //Every odd child is a text input (even ones are labels)
-                    for (let k=1; k<row.children[j].children.length; k+=3){
-                        options.push(row.children[j].children[k].value);
-                    }
-                    data.push(options);
-                }
-                else if (row.children[j].tagName !== "BR"){
-                    data.push(row.children[j].value);
-                }
+            let data = [];
+            let nameInput = row.getElementsByTagName("input")[0]
+            data.push(nameInput.value);
+            let typeSelector = nameInput.nextElementSibling
+            data.push(typeSelector.value);
+            let option = row.className.split(" ")[0];
+            data.push(option);
 
+            if(row.className.includes("Radio")){
+                let options = []
+                let inputFields = row.children[row.children.length-1].getElementsByTagName("input");
+                for (let j = 0; j < inputFields.length; j++) {
+                    options.push(inputFields[j].value)
+                }
+                data.push(options)
             }
+
+            console.log(data);
 
             if (!isValid(data)){
                 return alert("All fields must be named!")
             }
 
             //New object which will be stored in the database
-            let field;
+            let field = {
+                name: data[0],
+                type:data[1],
+                option: data[2]
+            }
 
-            if (data.length > 3){
-                field = {
-                    name: data[0],
-                    type:data[1],
-                    option: data[3],
-                    radioOptions: data[4]
-                }
+            if (data[3]){
+                field.radioOptions = data[3]
             }
-            else{
-                field = {
-                    name: data[0],
-                    type:data[1],
-                    option: data[2]
-                }
-            }
+
             form.fields.push(field);
 
         }
@@ -220,7 +217,7 @@
      * @param spinner object of type input
      */
     function numberChanged(spinner){
-        const optionsDiv = spinner.parentElement.children[6];
+        const optionsDiv = spinner.parentElement.children[spinner.parentElement.children.length-1];
         const value = spinner.value;
 
         //It disallows values less than 2, since it wouldn't make sense
@@ -298,7 +295,7 @@
 
     function renderOptionSpinner(option){
         if(option === "Mandatory"){
-            return `<select>
+            return `<select onchange="onOptionChanged(this)">
                         <option selected>Mandatory</option>
                         <option>Numeric</optionselected>
                         <option>None</option>
@@ -306,7 +303,7 @@
                     <br>`
         }
         else if (option === "Numeric"){
-            return `<select>
+            return `<select onchange="onOptionChanged(this)">
                         <option>Mandatory</option>
                         <option selected>Numeric</optionselected>
                         <option>None</option>
@@ -314,7 +311,7 @@
                     <br>`
         }
         else {
-            return `<select>
+            return `<select onchange="onOptionChanged(this)">
                         <option>Mandatory</option>
                         <option>Numeric</option>
                         <option selected>None</option>
@@ -347,13 +344,14 @@
                 <option>Radio button</option>
              </select>
 
-             <select>
+             <select onchange="onOptionChanged(this)">
                 <option>Mandatory</option>
                 <option>Numeric</option>
                 <option>None</option>
              </select>
              <br>
                 `;
+        inputField.className = "Mandatory Textbox"
         formContainer.appendChild(inputField);
         activeFields++;
     }
@@ -393,17 +391,27 @@
                 template += renderTypeSpinner(ev.type, counter, ev.radioOptions.length);
             }
             else{
-                renderTypeSpinner(ev.type, counter);
+                template += renderTypeSpinner(ev.type, counter);
             }
             template += renderOptionSpinner(ev.option);
 
             if (ev.radioOptions) template += renderRadioOptions(ev.radioOptions)
 
             inputField.innerHTML = template;
+            inputField.className = ev.option + " " + ev.type;
             container.appendChild(inputField);
             counter++;
         })
         activeFields = counter;
+    }
+
+    function onOptionChanged(view) {
+        let parent = view.parentElement
+        let newString = view.value;
+        for (let i = 1; i<parent.className.split(" ").length; i++){
+            newString += ` ${parent.className.split(" ")[i]}`
+        }
+        parent.className = newString;
     }
 
     //******************************************************************************************************************
